@@ -13,7 +13,7 @@ from numpy import mat, matrix
 import cv2 as cv
 from numpy.core.fromnumeric import size
 from PIL import Image
-
+from PIL import ImageQt
 from ui3 import *
 
 
@@ -32,12 +32,12 @@ class Work_thread(QThread):
 
     
 
-    signal=Signal(QPixmap)
+    updatepic=Signal(QPixmap)
 
     def __init__(self, parent=None):
         QThread.__init__(self,parent)
         
-        self.signal.connect(parent.start)
+        #self.signal.connect(parent.start)
 
     def run(self):
         stOutFrame = MV_FRAME_OUT()  
@@ -82,11 +82,11 @@ class Work_thread(QThread):
 
             
 
-            if PixelType_Gvsp_Mono8 == obj_cam_operation.st_frame_info.enPixelType:
-                numArray=CameraOperation.Mono_numpy(obj_cam_operation,buf_cache,obj_cam_operation.st_frame_info.nWidth,obj_cam_operation.st_frame_info.nHeight)
+            #if PixelType_Gvsp_Mono8 == obj_cam_operation.st_frame_info.enPixelType:
+            #    numArray=CameraOperation.Mono_numpy(obj_cam_operation,buf_cache,obj_cam_operation.st_frame_info.nWidth,obj_cam_operation.st_frame_info.nHeight)
                 
             # RGB直接显示
-            elif PixelType_Gvsp_RGB8_Packed == obj_cam_operation.st_frame_info.enPixelType:
+            if PixelType_Gvsp_RGB8_Packed == obj_cam_operation.st_frame_info.enPixelType:
                 numArray = CameraOperation.Color_numpy(obj_cam_operation,buf_cache,obj_cam_operation.st_frame_info.nWidth,obj_cam_operation.st_frame_info.nHeight)
 
             #如果是彩色且非RGB则转为RGB后显示
@@ -105,15 +105,26 @@ class Work_thread(QThread):
                 cdll.msvcrt.memcpy(byref(img_buff), stConvertParam.pDstBuffer, nConvertSize)
                 numArray = CameraOperation.Color_numpy(obj_cam_operation,img_buff,obj_cam_operation.st_frame_info.nWidth,obj_cam_operation.st_frame_info.nHeight)
 
+            current_image = Image.fromarray(numArray).resize((800, 600), Image.ANTIALIAS)
             print(type(numArray))
             print(numArray.shape)
-            cv.imshow("fsd",imgp)
-            
-            current_image = cv.resize(numArray,(450,300))
-            print(numArray)
-            cv.imshow("fsd",current_image)
+            print(numArray.dtype)
 
-            self.signal.emit(current_image)
+            picc=cv.imread("C:\\Users\\QXF\\Desktop\\mer\\mm.PNG",cv2.IMREAD_GRAYSCALE)
+            im=Image.fromarray(picc)
+            picc2=current_image.toqpixmap()
+
+
+            #cv.imshow("sdadas",numArray)
+            #print(numArray.shape)
+            #cv.imshow("fsd",imgp)
+            #imgs=np.asarray(current_image)
+
+            #current_image = cv.resize(numArray,(450,300))
+            #print(numArray)
+            #cv.imshow("fsd",imgs)
+            #piccc=ImageQt.toqpixmap(current_image)
+            self.updatepic.emit(picc2)
 
             nRet = obj_cam_operation.obj_cam.MV_CC_FreeImageBuffer(stOutFrame)
             if obj_cam_operation.b_exit == True:
@@ -122,7 +133,7 @@ class Work_thread(QThread):
                 if buf_cache is not None:
                     del buf_cache
                 break
-        
+        sys.exit(-1)
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -134,10 +145,10 @@ class MainWindow(QWidget):
         self.ui = Ui_Form()
         self.ui.setupUi(self)
 
-        self.ui.lbPic.setPixmap("C:\\Users\\QXF\\Desktop\\mer\\mm.PNG")
+        #self.ui.lbPic.setPixmap("C:\\Users\\QXF\\Desktop\\mer\\mm.PNG")
         
         self.th=Work_thread(self)
-        self.th.signal.connect(self.setpic)
+        self.th.updatepic.connect(self.setpic)
         #self.ps=PicSignal()
         #self.ps.show_pic.connect()
         
@@ -168,8 +179,10 @@ class MainWindow(QWidget):
     @Slot()
     def imgtest(self):
         picc=cv.imread("C:\\Users\\QXF\\Desktop\\mer\\mm.PNG")
+        cv.imshow("sdss",picc)
         print(type(picc))
         print(picc.shape)
+        print(picc.dtype)
     @Slot()
     def showsinglecolor(self):
         img=np.zeros((450,300,3),dtype='uint8')
