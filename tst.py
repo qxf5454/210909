@@ -28,11 +28,9 @@ from CamOperation_class import *
 
 
 
-class Work_thread(QThread):
+class Work_thread(QThread):    
 
-    
-
-    updatepic=Signal(QPixmap)
+    updatepic=Signal(QPixmap,np.ndarray)
 
     def __init__(self, parent=None):
         QThread.__init__(self,parent)
@@ -44,12 +42,9 @@ class Work_thread(QThread):
         img_buff = None
         buf_cache = None
         numArray = None
-        global obj_cam_operation
+        global obj_cam_operation 
         
-        
-
-        
-        while True:
+        while not self.isInterruptionRequested():
             
             ret = obj_cam_operation.obj_cam.MV_CC_GetImageBuffer(stOutFrame, 1000)
             if 0 == ret:
@@ -79,14 +74,12 @@ class Work_thread(QThread):
             stConvertParam.pSrcData = cast(buf_cache, POINTER(c_ubyte))
             stConvertParam.nSrcDataLen = obj_cam_operation.st_frame_info.nFrameLen
             stConvertParam.enSrcPixelType = obj_cam_operation.st_frame_info.enPixelType 
-
-            
-
-            #if PixelType_Gvsp_Mono8 == obj_cam_operation.st_frame_info.enPixelType:
-            #    numArray=CameraOperation.Mono_numpy(obj_cam_operation,buf_cache,obj_cam_operation.st_frame_info.nWidth,obj_cam_operation.st_frame_info.nHeight)
-                
+     
+            if PixelType_Gvsp_Mono8 == obj_cam_operation.st_frame_info.enPixelType:
+                numArray=CameraOperation.Mono_numpy(obj_cam_operation,buf_cache,obj_cam_operation.st_frame_info.nWidth,obj_cam_operation.st_frame_info.nHeight)
+                                                                
             # RGB直接显示
-            if PixelType_Gvsp_RGB8_Packed == obj_cam_operation.st_frame_info.enPixelType:
+            elif PixelType_Gvsp_RGB8_Packed == obj_cam_operation.st_frame_info.enPixelType:
                 numArray = CameraOperation.Color_numpy(obj_cam_operation,buf_cache,obj_cam_operation.st_frame_info.nWidth,obj_cam_operation.st_frame_info.nHeight)
 
             #如果是彩色且非RGB则转为RGB后显示
@@ -105,26 +98,18 @@ class Work_thread(QThread):
                 cdll.msvcrt.memcpy(byref(img_buff), stConvertParam.pDstBuffer, nConvertSize)
                 numArray = CameraOperation.Color_numpy(obj_cam_operation,img_buff,obj_cam_operation.st_frame_info.nWidth,obj_cam_operation.st_frame_info.nHeight)
 
-            current_image = Image.fromarray(numArray).resize((800, 600), Image.ANTIALIAS)
-            print(type(numArray))
-            print(numArray.shape)
-            print(numArray.dtype)
-
-            picc=cv.imread("C:\\Users\\QXF\\Desktop\\mer\\mm.PNG",cv2.IMREAD_GRAYSCALE)
-            im=Image.fromarray(picc)
-            picc2=current_image.toqpixmap()
-
-
-            #cv.imshow("sdadas",numArray)
+            current_image = cv.resize(numArray,(450,300),interpolation=cv.INTER_AREA)
+            #print(type(numArray))
             #print(numArray.shape)
-            #cv.imshow("fsd",imgp)
-            #imgs=np.asarray(current_image)
+            #print(numArray.dtype)
 
-            #current_image = cv.resize(numArray,(450,300))
-            #print(numArray)
-            #cv.imshow("fsd",imgs)
-            #piccc=ImageQt.toqpixmap(current_image)
-            self.updatepic.emit(picc2)
+            
+            im=Image.fromarray(current_image)
+            #print(type(im))
+            picc2=im.toqpixmap()
+            #print(type(picc2))
+            
+            self.updatepic.emit(picc2,numArray)
 
             nRet = obj_cam_operation.obj_cam.MV_CC_FreeImageBuffer(stOutFrame)
             if obj_cam_operation.b_exit == True:
@@ -133,7 +118,7 @@ class Work_thread(QThread):
                 if buf_cache is not None:
                     del buf_cache
                 break
-        sys.exit(-1)
+        #sys.exit(-1)
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -165,16 +150,24 @@ class MainWindow(QWidget):
     
     @Slot()
     def start(self):
-        self.th.start()
+        if not self.th.isRunning():
+            obj_cam_operation.obj_cam.MV_CC_StartGrabbing()
+            self.th.start()
 
-    @Slot(QPixmap)
-    def setpic(self, pic):
+    @Slot(QPixmap,np.ndarray)
+    def setpic(self, pic,numarr):
         self.ui.lbPic.setPixmap(pic)
-
+        global originArray
+        originArray=numarr
+    
     
     @Slot()
     def stopgrab(self):
-        self.th.terminate()
+        if self.th.isRunning():
+            
+            self.th.requestInterruption()
+            self.th.quit()
+            obj_cam_operation.obj_cam.MV_CC_StopGrabbing()
 
     @Slot()
     def imgtest(self):
@@ -189,8 +182,7 @@ class MainWindow(QWidget):
         img[:,:,0]=200
         cv.imshow("sdfsd",img)
 
-    def showmat(self):
-        print("called")
+    
 
     #ch:枚举相机 | en:enum devices
     def enum_devices(self):
@@ -260,7 +252,7 @@ class MainWindow(QWidget):
         else:
             obj_cam_operation.Set_trigger_mode("triggermode")
             b_is_run = True
-        obj_cam_operation.obj_cam.MV_CC_StartGrabbing()
+        
 
     # ch:开始取流 | en:Start grab image
     def start_grabbing(self):
@@ -321,6 +313,9 @@ if __name__ == '__main__':
     obj_cam_operation = 0
     global b_is_run
     b_is_run = False    
+    global originArray
+    originArray=np.ndarray
+    
 
     app = QApplication(sys.argv)
     w = MainWindow()
